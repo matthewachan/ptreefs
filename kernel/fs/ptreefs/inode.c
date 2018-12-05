@@ -12,6 +12,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/fs.h>
+#include <linux/ptreefs.h>
+#include <linux/pagemap.h>
 #include <linux/sched.h>
 #include <linux/namei.h>
 #include <linux/slab.h>
@@ -28,14 +30,14 @@
 #define PTREEFS_MAGIC	0x15782921
 #define DEVPTS_DEFAULT_MODE 0600
 
-static void ptree_create_files(struct super_block *sb,
+void ptree_create_files(struct super_block *sb,
 		struct dentry *root)
 {
 	ptree_create_file(sb, root, "init");
 
 }
 
-static void ptree_create_file(struct super_block *sb,
+struct dentry *ptree_create_file(struct super_block *sb,
 		struct dentry *dir, const char *name)
 {
 	struct inode *inode;
@@ -49,7 +51,7 @@ static void ptree_create_file(struct super_block *sb,
 	inode = ptree_make_inode(sb, S_IFREG | 0644);
 	if (!inode)
 		return -ENOMEM;
-	inode_>i_fop = &simple_dir_operations;
+	inode->i_fop = &simple_dir_operations;
 
 	dentry = d_alloc(dir, &qname);
 	if (!dentry)
@@ -60,31 +62,31 @@ static void ptree_create_file(struct super_block *sb,
 }
 
 /* Helper function to create an inode */
-static struct inode *ptree_make_inode(struct super_block *sb,
+struct inode *ptree_make_inode(struct super_block *sb,
 		int mode)
 {
 	struct inode *inode;
 	inode = new_inode(sb);
 
-	if (!inode)
-		return -ENOMEM;
+	/* if (!inode) */
+	/* 	return -ENOMEM; */
 
 	inode->i_ino = 1;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_mode = mode;
-	inode->i_blksize = PAGE_CACHE_SIZE;
+	inode->i_blkbits = PAGE_CACHE_SIZE;
 	inode->i_blocks = 0;
-	inode->i_uid = inode->i_gid = 0;
+	/* inode->i_uid = inode->i_gid = 0; */
 
 	return inode;
 }
 
-static struct super_operations ptree_s_ops = {
+struct super_operations ptree_s_ops = {
 	.statfs		= simple_statfs,
 	.drop_inode	= generic_delete_inode,
 };
 
-static int ptree_fill_super(struct super_block *sb,
+int ptree_fill_super(struct super_block *sb,
 		void *data, int silent)
 {
 	struct inode *root;
@@ -117,21 +119,21 @@ static int ptree_fill_super(struct super_block *sb,
 	return 0;
 }
 
-static struct dentry *ptree_mount(struct file_system_type *fs_type,
+struct dentry *ptree_mount(struct file_system_type *fs_type,
 		int flags, const char *dev_name,
 		void * data)
 {
 	return mount_single(fs_type, flags, data, ptree_fill_super);
 }
 
-static struct file_system_type ptree_fs_type = {
+struct file_system_type ptree_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "ptreefs",
 	.mount		= ptree_mount,
 	.kill_sb	= kill_litter_super,
 };
 
-static int __init ptreefs_init(void)
+int __init ptreefs_init(void)
 {
 	int err = register_filesystem(&ptree_fs_type);
 	return err;
