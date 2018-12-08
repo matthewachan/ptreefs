@@ -12,6 +12,57 @@
 #include <linux/parser.h>
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
+#include <linux/pagemap.h>
+
+struct inode *ptree_make_inode(struct super_block *sb,
+			       int mode)
+{
+	struct inode *inode;
+	inode = new_inode(sb);
+
+	/* if (!inode) */
+	/* 	return -ENOMEM; */
+
+	inode->i_ino = get_next_ino();
+	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_mode = mode;
+	inode->i_blkbits = PAGE_CACHE_SIZE;
+	inode->i_blocks = 0;
+	/* inode->i_uid = inode->i_gid = 0; */
+
+	return inode;
+}
+
+struct dentry *ptree_create_dir (struct super_block *sb,
+				 struct dentry *parent, const char *name)
+{
+	struct dentry *dentry;
+	struct inode *inode;
+	struct qstr qname;
+
+	qname.name	= name;
+	qname.len	= strlen (name);
+	qname.hash	= full_name_hash(name, qname.len);
+
+	dentry = d_alloc(parent, &qname);
+	/* if (! dentry) */
+	/* 	goto out; */
+
+	inode = ptree_make_inode(sb, S_IFDIR | 0777);
+	/* if (! inode) */
+	/* 	goto out_dput; */
+
+	inode->i_op = &simple_dir_inode_operations;
+	inode->i_fop = &simple_dir_operations;
+
+	d_add(dentry, inode);
+	return dentry;
+
+	/* out_dput: */
+	/* 	dput(dentry); */
+	/* out: */
+	/* 	return 0; */
+}
 
 void ptree_create_files(struct super_block *sb,
 		struct dentry *root)
@@ -19,14 +70,16 @@ void ptree_create_files(struct super_block *sb,
 	struct dentry *subdir = root;
 	struct task_struct *init = &init_task;
 	struct task_struct *p = init;
+	long pid;
+	char s_pid[6];
+
 	bool going_up = false;
 
 	read_lock(&tasklist_lock);
 	while (!going_up || likely(p != init)) {
 		if (!going_up) {
 			/* Get PID for init_task */
-			long pid = (long)task_pid_nr(p);
-			char s_pid[6];
+			pid = (long)task_pid_nr(p);
 			sprintf(s_pid, "%ld", pid);
 
 			/* Create a directory for init_task */
@@ -112,36 +165,7 @@ struct dentry *ptree_create_file(struct super_block *sb,
 	return dentry;
 };
 
-struct dentry *ptree_create_dir (struct super_block *sb,
-		struct dentry *parent, const char *name)
-{
-	struct dentry *dentry;
-	struct inode *inode;
-	struct qstr qname;
 
-	qname.name	= name;
-	qname.len	= strlen (name);
-	qname.hash	= full_name_hash(name, qname.len);
-
-	dentry = d_alloc(parent, &qname);
-	/* if (! dentry) */
-	/* 	goto out; */
-
-	inode = ptree_make_inode(sb, S_IFDIR | 0777);
-	/* if (! inode) */
-	/* 	goto out_dput; */
-
-	inode->i_op = &simple_dir_inode_operations;
-	inode->i_fop = &simple_dir_operations;
-
-	d_add(dentry, inode);
-	return dentry;
-
-	/* out_dput: */
-	/* 	dput(dentry); */
-	/* out: */
-	/* 	return 0; */
-}
 
 static int ptree_open(struct inode *inode, struct file *filp)
 {
@@ -189,6 +213,7 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         if (!inode)
                 goto fail;
 
+        inode->i_ino = 1;
         inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
         inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
         inode->i_op = &simple_dir_inode_operations;
