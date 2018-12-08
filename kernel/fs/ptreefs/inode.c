@@ -13,6 +13,136 @@
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
 
+void ptree_create_files(struct super_block *sb,
+		struct dentry *root)
+{
+	struct dentry *subdir = root;
+	struct task_struct *init = &init_task;
+	struct task_struct *p = init;
+	bool going_up = false;
+
+	read_lock(&tasklist_lock);
+	while (!going_up || likely(p != init)) {
+		if (!going_up) {
+			/* Get PID for init_task */
+			long pid = (long)task_pid_nr(p);
+			char s_pid[6];
+			sprintf(s_pid, "%ld", pid);
+
+			/* Create a directory for init_task */
+			subdir = ptree_create_dir(sb, subdir, s_pid);
+
+		}
+		if (!going_up && !list_empty(&p->children)) {
+			p = list_last_entry(&p->children, struct task_struct,
+					sibling);
+		} else if (p->sibling.prev != &p->real_parent->children) {
+			p = list_last_entry(&p->sibling, struct task_struct,
+					sibling);
+			subdir = subdir->d_parent;
+			going_up = false;
+		} else {
+			p = p->real_parent;
+			subdir = subdir->d_parent;
+			going_up = true;
+		}
+	}
+	read_unlock(&tasklist_lock);
+};
+
+// void ptree_dfs(struct super_block *sb,
+// 		struct dentry *root, struct task_struct *task)
+// {
+// 	/* Create a file using the processes' name */
+// 	/* char name[TASK_COMM_LEN]; */
+// 	char *name = kmalloc(TASK_COMM_LEN, GFP_KERNEL);
+// 	struct list_head *p;
+// 	struct task_struct *child;
+// 	struct dentry *subdir;
+// 	struct task_struct *init = task;
+// 	struct task_struct *p = init;
+// 	long pid;
+// 	char s_pid[6];
+// 	bool going_up = false;
+//
+// 	/* Create file in current directory */
+// 	get_task_comm(name, p);
+// 	ptree_create_file(sb, root, name);
+//
+// 	/* Create directories for children and recurse */
+// 	list_for_each(p, &(task->children)) {
+// 		child = list_entry(p, struct task_struct, sibling);
+// 		pid = (long)task_pid_nr(child);
+// 		sprintf(s_pid, "%ld", pid);
+// 		subdir = ptree_create_dir(sb, root, s_pid);
+// 		if (subdir)
+// 			ptree_dfs(sb, subdir, child);
+//
+// 	}
+// 	while (!going_up || likely(p != init)) {
+// 		if (!going_up) {
+//
+// 		}
+// 	}
+// 	kfree(name);
+//
+// };
+
+struct dentry *ptree_create_file(struct super_block *sb,
+		struct dentry *dir, const char *name)
+{
+	struct inode *inode;
+	struct dentry *dentry;
+	struct qstr qname;
+
+	qname.name	= name;
+	qname.len	= strlen(name);
+	qname.hash	= full_name_hash(name, qname.len);
+
+	inode = ptree_make_inode(sb, S_IFREG | 0777);
+	/* if (!inode) */
+	/* 	return -ENOMEM; */
+	inode->i_fop = &simple_dir_operations;
+
+	dentry = d_alloc(dir, &qname);
+	/* if (!dentry) */
+	/* 	return -ENOMEM; */
+
+	d_add(dentry, inode);
+	return dentry;
+};
+
+struct dentry *ptree_create_dir (struct super_block *sb,
+		struct dentry *parent, const char *name)
+{
+	struct dentry *dentry;
+	struct inode *inode;
+	struct qstr qname;
+
+	qname.name	= name;
+	qname.len	= strlen (name);
+	qname.hash	= full_name_hash(name, qname.len);
+
+	dentry = d_alloc(parent, &qname);
+	/* if (! dentry) */
+	/* 	goto out; */
+
+	inode = ptree_make_inode(sb, S_IFDIR | 0777);
+	/* if (! inode) */
+	/* 	goto out_dput; */
+
+	inode->i_op = &simple_dir_inode_operations;
+	inode->i_fop = &simple_dir_operations;
+
+	d_add(dentry, inode);
+	return dentry;
+
+	/* out_dput: */
+	/* 	dput(dentry); */
+	/* out: */
+	/* 	return 0; */
+}
+
 static int ptree_open(struct inode *inode, struct file *filp)
 {
         printk("I am open\n");
@@ -65,12 +195,12 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         inode->i_fop = &ptreefs_file_ops;
 
         sb->s_root = d_make_root(inode);
-        if (sb->s_root)
-                return 0;
-
-        pr_err("get root dentry failed\n");
+        if (!sb->s_root)
+                goto fail;
+	ptree_create_files(sb, sb->s_root);
 
 fail:
+	pr_err("get root dentry failed\n");
         return -ENOMEM;
 }
 
