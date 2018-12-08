@@ -13,6 +13,32 @@
 #include <linux/fsnotify.h>
 #include <linux/seq_file.h>
 
+static int ptree_open(struct inode *inode, struct file *filp)
+{
+        printk("I am open\n");
+        return 0;
+}
+
+static ssize_t ptree_read(struct file *filp, char *buf,
+                             size_t count, loff_t *offset)
+{
+        printk("I am read\n");
+        return 0;
+}
+
+static ssize_t ptree_write(struct file *filp, const char *buf,
+                              size_t count, loff_t *offset)
+{
+        printk("I am write\n");
+        return 0;
+}
+
+static struct file_operations ptreefs_file_ops = {
+        .open	= ptree_open,
+        .read 	= ptree_read,
+        .write  = ptree_write,
+};
+
 static const struct super_operations ptreefs_s_ops = {
         .statfs         = simple_statfs,
         .drop_inode     = generic_delete_inode,
@@ -36,15 +62,13 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
         inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
         inode->i_op = &simple_dir_inode_operations;
-        inode->i_fop = &simple_dir_operations;
+        inode->i_fop = &ptreefs_file_ops;
 
         sb->s_root = d_make_root(inode);
         if (sb->s_root)
                 return 0;
 
         pr_err("get root dentry failed\n");
-
-        return 0;
 
 fail:
         return -ENOMEM;
