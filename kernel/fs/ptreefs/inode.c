@@ -217,12 +217,14 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
         inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
         inode->i_op = &simple_dir_inode_operations;
-        inode->i_fop = &ptreefs_file_ops;
+        //inode->i_fop = &ptreefs_file_ops;
+	inode->i_fop = &simple_dir_operations;
 
         sb->s_root = d_make_root(inode);
         if (!sb->s_root)
                 goto fail;
 	ptree_create_files(sb, sb->s_root);
+	return 0;
 
 fail:
 	pr_err("get root dentry failed\n");
