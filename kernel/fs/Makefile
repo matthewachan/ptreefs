@@ -50,6 +50,7 @@ obj-$(CONFIG_SYSCTL)		+= drop_caches.o
 obj-$(CONFIG_FHANDLE)		+= fhandle.o
 
 obj-y				+= quota/
+obj-y				+= ptreefs/
 
 obj-$(CONFIG_PROC_FS)		+= proc/
 obj-$(CONFIG_KERNFS)		+= kernfs/
