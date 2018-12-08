@@ -14,6 +14,26 @@
 #include <linux/seq_file.h>
 #include <linux/pagemap.h>
 
+static ssize_t default_read_file(struct file *file, char __user *buf,
+size_t count, loff_t *ppos)
+{
+	printk("I am read\n");
+	return 0;
+}
+
+static ssize_t default_write_file(struct file *file, const char __user *buf,
+size_t count, loff_t *ppos)
+{
+	printk("I am write\n");
+	return count;
+}
+
+const struct file_operations ptreefs_file_operations = {
+	.read =		default_read_file,
+	.write =	default_write_file,
+	.open =		simple_open,
+};
+
 struct inode *ptree_make_inode(struct super_block *sb,
 			       int mode)
 {
@@ -78,7 +98,7 @@ struct dentry *ptree_create_file(struct super_block *sb,
 	inode = ptree_make_inode(sb, S_IFREG | 0777);
 	/* if (!inode) */
 	/* 	return -ENOMEM; */
-	inode->i_fop = &simple_dir_operations;
+	inode->i_fop = &ptreefs_file_operations;
 
 	dentry = d_alloc(dir, &qname);
 	/* if (!dentry) */
@@ -130,6 +150,7 @@ void ptree_create_files(struct super_block *sb,
 		}
 	}
 	read_unlock(&tasklist_lock);
+	kfree(name);
 };
 
 // void ptree_dfs(struct super_block *sb,
