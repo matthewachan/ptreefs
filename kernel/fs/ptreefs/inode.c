@@ -62,11 +62,36 @@ struct dentry *ptree_create_dir (struct super_block *sb,
 	/* 	dput(dentry); */
 	/* out: */
 	/* 	return 0; */
-}
+};
+
+struct dentry *ptree_create_file(struct super_block *sb,
+		struct dentry *dir, const char *name)
+{
+	struct inode *inode;
+	struct dentry *dentry;
+	struct qstr qname;
+
+	qname.name	= name;
+	qname.len	= strlen(name);
+	qname.hash	= full_name_hash(name, qname.len);
+
+	inode = ptree_make_inode(sb, S_IFREG | 0777);
+	/* if (!inode) */
+	/* 	return -ENOMEM; */
+	inode->i_fop = &simple_dir_operations;
+
+	dentry = d_alloc(dir, &qname);
+	/* if (!dentry) */
+	/* 	return -ENOMEM; */
+
+	d_add(dentry, inode);
+	return dentry;
+};
 
 void ptree_create_files(struct super_block *sb,
 		struct dentry *root)
 {
+	char *name = kmalloc(TASK_COMM_LEN + 5, GFP_KERNEL);
 	struct dentry *subdir = root;
 	struct task_struct *init = &init_task;
 	struct task_struct *p = init;
@@ -84,6 +109,10 @@ void ptree_create_files(struct super_block *sb,
 
 			/* Create a directory for init_task */
 			subdir = ptree_create_dir(sb, subdir, s_pid);
+
+			get_task_comm(name, p);
+			strcat(name, ".name");
+			ptree_create_file(sb, subdir, name);
 
 		}
 		if (!going_up && !list_empty(&p->children)) {
@@ -140,31 +169,6 @@ void ptree_create_files(struct super_block *sb,
 // 	kfree(name);
 //
 // };
-
-struct dentry *ptree_create_file(struct super_block *sb,
-		struct dentry *dir, const char *name)
-{
-	struct inode *inode;
-	struct dentry *dentry;
-	struct qstr qname;
-
-	qname.name	= name;
-	qname.len	= strlen(name);
-	qname.hash	= full_name_hash(name, qname.len);
-
-	inode = ptree_make_inode(sb, S_IFREG | 0777);
-	/* if (!inode) */
-	/* 	return -ENOMEM; */
-	inode->i_fop = &simple_dir_operations;
-
-	dentry = d_alloc(dir, &qname);
-	/* if (!dentry) */
-	/* 	return -ENOMEM; */
-
-	d_add(dentry, inode);
-	return dentry;
-};
-
 
 
 static int ptree_open(struct inode *inode, struct file *filp)
