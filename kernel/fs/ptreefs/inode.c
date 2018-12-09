@@ -14,24 +14,69 @@
 #include <linux/seq_file.h>
 #include <linux/pagemap.h>
 
-static ssize_t default_read_file(struct file *file, char __user *buf,
+static int ptreefs_open_file(struct inode *inode, struct file *file)
+{
+	printk("I am open\n");
+	return simple_open(inode, file);
+};
+
+static ssize_t ptreefs_read_file(struct file *file, char __user *buf,
 size_t count, loff_t *ppos)
 {
 	printk("I am read\n");
 	return 0;
+};
+
+static int ptreefs_update(struct inode *inode, struct file *file)
+{
+	const char *name = file->f_path.dentry->d_name.name;
+	struct task_struct *p;
+	long pid;
+
+	/*Find task by name (alternative for generality)*/
+	pid = strtol(name, NULL, 10);
+	p = find_task_by_vpid(pid);
+	if (!p)
+	/*Process updated handler*/
+		return -EFAULT;
+
 }
 
-static ssize_t default_write_file(struct file *file, const char __user *buf,
+int ptreefs_dir_open(struct inode *inode, struct file *file)
+{
+	static struct qstr cursor_name = QSTR_INIT(".", 1);
+	const char *name = file->f_path.dentry->d_name.name;
+
+	// if (inode->i_sb->s_root ==
+	// 	file->f_path.dentry->d_parent) {
+	printk("Dir[%s] open\n", name);
+	ptreefs_update(inode, file);
+	// }
+	file->private_data = d_alloc(file->f_path.dentry, &cursor_name);
+
+	return file->private_data ? 0 : -ENOMEM;
+}
+
+static ssize_t ptreefs_write_file(struct file *file, const char __user *buf,
 size_t count, loff_t *ppos)
 {
 	printk("I am write\n");
 	return count;
-}
+};
 
 const struct file_operations ptreefs_file_operations = {
-	.read =		default_read_file,
-	.write =	default_write_file,
-	.open =		simple_open,
+	.open		= ptreefs_open_file,
+	.read		= ptreefs_read_file,
+	.write		= ptreefs_write_file,
+};
+
+const struct file_operations ptreefs_dir_operations = {
+	.open		= ptreefs_dir_open,
+	.release	= dcache_dir_close,
+	.llseek		= dcache_dir_lseek,
+	.read		= ptreefs_read_file,
+	.iterate	= dcache_readdir,
+	.fsync		= noop_fsync,
 };
 
 struct inode *ptree_make_inode(struct super_block *sb,
@@ -51,9 +96,9 @@ struct inode *ptree_make_inode(struct super_block *sb,
 	/* inode->i_uid = inode->i_gid = 0; */
 
 	return inode;
-}
+};
 
-struct dentry *ptree_create_dir (struct super_block *sb,
+struct dentry *ptree_create_dir(struct super_block *sb,
 				 struct dentry *parent, const char *name)
 {
 	struct dentry *dentry;
@@ -73,7 +118,7 @@ struct dentry *ptree_create_dir (struct super_block *sb,
 	/* 	goto out_dput; */
 
 	inode->i_op = &simple_dir_inode_operations;
-	inode->i_fop = &simple_dir_operations;
+	inode->i_fop = &ptreefs_dir_operations;
 
 	d_add(dentry, inode);
 	return dentry;
@@ -108,7 +153,7 @@ struct dentry *ptree_create_file(struct super_block *sb,
 	return dentry;
 };
 
-void ptree_create_files(struct super_block *sb,
+static void ptree_create_files(struct super_block *sb,
 		struct dentry *root)
 {
 	char *name = kmalloc(TASK_COMM_LEN + 5, GFP_KERNEL);
@@ -123,11 +168,11 @@ void ptree_create_files(struct super_block *sb,
 	read_lock(&tasklist_lock);
 	while (!going_up || likely(p != init)) {
 		if (!going_up) {
-			/* Get PID for init_task */
+			/* Get PID for task */
 			pid = (long)task_pid_nr(p);
 			sprintf(s_pid, "%ld", pid);
 
-			/* Create a directory for init_task */
+			/* Create a directory for task */
 			subdir = ptree_create_dir(sb, subdir, s_pid);
 
 			get_task_comm(name, p);
@@ -151,71 +196,6 @@ void ptree_create_files(struct super_block *sb,
 	}
 	read_unlock(&tasklist_lock);
 	kfree(name);
-};
-
-// void ptree_dfs(struct super_block *sb,
-// 		struct dentry *root, struct task_struct *task)
-// {
-// 	/* Create a file using the processes' name */
-// 	/* char name[TASK_COMM_LEN]; */
-// 	char *name = kmalloc(TASK_COMM_LEN, GFP_KERNEL);
-// 	struct list_head *p;
-// 	struct task_struct *child;
-// 	struct dentry *subdir;
-// 	struct task_struct *init = task;
-// 	struct task_struct *p = init;
-// 	long pid;
-// 	char s_pid[6];
-// 	bool going_up = false;
-//
-// 	/* Create file in current directory */
-// 	get_task_comm(name, p);
-// 	ptree_create_file(sb, root, name);
-//
-// 	/* Create directories for children and recurse */
-// 	list_for_each(p, &(task->children)) {
-// 		child = list_entry(p, struct task_struct, sibling);
-// 		pid = (long)task_pid_nr(child);
-// 		sprintf(s_pid, "%ld", pid);
-// 		subdir = ptree_create_dir(sb, root, s_pid);
-// 		if (subdir)
-// 			ptree_dfs(sb, subdir, child);
-//
-// 	}
-// 	while (!going_up || likely(p != init)) {
-// 		if (!going_up) {
-//
-// 		}
-// 	}
-// 	kfree(name);
-//
-// };
-
-
-static int ptree_open(struct inode *inode, struct file *filp)
-{
-        printk("I am open\n");
-        return 0;
-}
-
-static ssize_t ptree_read(struct file *filp, char *buf,
-                             size_t count, loff_t *offset)
-{
-        printk("I am read\n");
-        return 0;
-}
-
-static ssize_t ptree_write(struct file *filp, const char *buf,
-                              size_t count, loff_t *offset)
-{
-        printk("I am write\n");
-        return 0;
-}
-
-static struct file_operations ptreefs_file_ops = {
-        .open	= ptree_open,
-        .read 	= ptree_read,
-        .write  = ptree_write,
 };
 
 static const struct super_operations ptreefs_s_ops = {
