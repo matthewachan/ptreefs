@@ -14,6 +14,17 @@
 #include <linux/seq_file.h>
 #include <linux/pagemap.h>
 
+static void repslash(char* oristr)
+{
+        char *p = oristr;
+        while(*p != '\0') {
+                if (*p == '/') {
+                        *p = '-';
+                }
+                p++;
+        }
+}
+
 static ssize_t default_read_file(struct file *file, char __user *buf,
 size_t count, loff_t *ppos)
 {
@@ -131,6 +142,7 @@ void ptree_create_files(struct super_block *sb,
 			subdir = ptree_create_dir(sb, subdir, s_pid);
 
 			get_task_comm(name, p);
+                        repslash(name);
 			strcat(name, ".name");
 			ptree_create_file(sb, subdir, name);
 
