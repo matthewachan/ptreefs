@@ -18,12 +18,11 @@ static void repslash(char* oristr)
 {
         char *p = oristr;
         while(*p != '\0') {
-                if (*p == '/') {
+                if (*p == '/')
                         *p = '-';
-                }
                 p++;
         }
-}
+};
 
 static int ptreefs_open_file(struct inode *inode, struct file *file)
 {
@@ -38,35 +37,128 @@ size_t count, loff_t *ppos)
 	return 0;
 };
 
+static int ptreefs_rmdir(struct inode *dir, struct dentry *dentry)
+{
+	struct dentry *child;
+
+	if (!simple_empty(dentry)) {
+		list_for_each_entry(child, &dentry->d_subdirs, d_child) {
+			spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
+			ptreefs_rmdir(child->d_inode, child);
+			spin_unlock(&child->d_lock);
+		}
+	} else
+		simple_rmdir(dir, dentry);
+
+	return 0;
+};
+
 static int ptreefs_update(struct inode *inode, struct file *file)
 {
 	const char *name = file->f_path.dentry->d_name.name;
-	struct task_struct *p;
-	long pid;
+	struct dentry *child, *dentry = file->f_path.dentry;
+	struct task_struct *p, *parent;
+	long pid, c_pid, dir_pid;
+	int flag;
 
 	/*Find task by name (alternative for generality)*/
-	pid = strtol(name, NULL, 10);
-	p = find_task_by_vpid(pid);
-	if (!p)
-	/*Process updated handler*/
+	if (kstrtol(name, 10, &pid))
 		return -EFAULT;
 
-}
+	read_lock(&tasklist_lock);
+	parent = find_task_by_vpid(pid);
+	read_unlock(&tasklist_lock);
+
+	/*Process missing handler*/
+	if (!parent)
+		return -EFAULT;
+
+	read_lock(&tasklist_lock);
+	spin_lock(&dentry->d_lock);
+	/*travrse subdirs first*/
+	list_for_each_entry(child, &dentry->d_subdirs, d_child) {
+		spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
+
+		if (!(child->d_inode->i_mode & S_IFDIR))
+			goto next;
+
+		name = child->d_name.name;
+		if (kstrtol(name, 10, &dir_pid)) {
+			spin_unlock(&child->d_lock);
+			spin_unlock(&dentry->d_lock);
+			read_unlock(&tasklist_lock);
+			printk("kstrtol failed\n");
+			return -EFAULT;
+		}
+
+		p = find_task_by_vpid(dir_pid);
+
+		if (!p) {
+			printk("[%ld] terminates\n", dir_pid);
+			//ptreefs_rmdir(child->d_inode, child);
+		} else if (p->real_parent->pid != pid)
+			printk("[%ld] reparenting\n", dir_pid);
+		else {
+			//printk("[%ld] not changed\n", dir_pid);
+		}
+
+next:
+		spin_unlock(&child->d_lock);
+	}
+
+	/*traverse process children in pstree first*/
+	list_for_each_entry(p, &parent->children, sibling) {
+		c_pid = (long)task_pid_nr(p);
+		flag = 0;
+
+		list_for_each_entry(child, &dentry->d_subdirs, d_child) {
+			spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
+
+			if (!(child->d_inode->i_mode & S_IFDIR))
+				goto next_p;
+
+			name = child->d_name.name;
+			if (kstrtol(name, 10, &dir_pid)) {
+				spin_unlock(&child->d_lock);
+				spin_unlock(&dentry->d_lock);
+				read_unlock(&tasklist_lock);
+				printk("kstrtol failed\n");
+				return -EFAULT;
+			}
+
+			if (c_pid == dir_pid)
+				flag = 1;
+next_p:
+			spin_unlock(&child->d_lock);
+		}
+		/*need to create new dir*/
+		if (flag == 0)
+			printk("[%ld] newly generated\n", c_pid);
+	}
+
+	spin_unlock(&dentry->d_lock);
+	read_unlock(&tasklist_lock);
+
+	return 0;
+};
 
 int ptreefs_dir_open(struct inode *inode, struct file *file)
 {
 	static struct qstr cursor_name = QSTR_INIT(".", 1);
-	const char *name = file->f_path.dentry->d_name.name;
+	struct dentry *dentry = file->f_path.dentry;
+	const char *name = dentry->d_name.name;
 
 	// if (inode->i_sb->s_root ==
 	// 	file->f_path.dentry->d_parent) {
 	printk("Dir[%s] open\n", name);
+	if (!simple_empty(dentry))
+		printk("Dir[%s] not empty\n", name);
 	ptreefs_update(inode, file);
 	// }
 	file->private_data = d_alloc(file->f_path.dentry, &cursor_name);
 
 	return file->private_data ? 0 : -ENOMEM;
-}
+};
 
 static ssize_t ptreefs_write_file(struct file *file, const char __user *buf,
 size_t count, loff_t *ppos)
