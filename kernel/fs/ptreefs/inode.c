@@ -19,8 +19,7 @@ static void ptree_create_files(struct super_block *sb,
 
 static int ptree_fill_super(struct super_block *sb, void *data, int silent);
 
-static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
-{
+static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent) {
 	if (simple_positive(dentry)) {
 		dget(dentry);
 		simple_unlink(d_inode(parent), dentry);
@@ -31,8 +30,7 @@ static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
 	return 0;
 }
 
-static void ptreefs_remove_recursive(struct dentry *dentry)
-{
+static void ptreefs_remove_recursive(struct dentry *dentry) {
 	struct dentry *child, *parent;
 
 	if (IS_ERR_OR_NULL(dentry))
@@ -43,27 +41,28 @@ static void ptreefs_remove_recursive(struct dentry *dentry)
 		return;
 
 	parent = dentry;
-down:
+	down:
 	mutex_lock(&d_inode(parent)->i_mutex);
-loop:
+	loop:
 	spin_lock(&parent->d_lock);
-	list_for_each_entry(child, &parent->d_subdirs, d_child) {
-	if (!simple_positive(child))
-		continue;
+	list_for_each_entry(child, &parent->d_subdirs, d_child)
+	{
+		if (!simple_positive(child))
+			continue;
 
-	/* perhaps simple_empty(child) makes more sense */
-	if (!list_empty(&child->d_subdirs)) {
+		/* perhaps simple_empty(child) makes more sense */
+		if (!list_empty(&child->d_subdirs)) {
+			spin_unlock(&parent->d_lock);
+			mutex_unlock(&d_inode(parent)->i_mutex);
+			parent = child;
+			goto down;
+		}
+
 		spin_unlock(&parent->d_lock);
-		mutex_unlock(&d_inode(parent)->i_mutex);
-		parent = child;
-		goto down;
-	}
 
-	spin_unlock(&parent->d_lock);
+		__ptreefs_remove(child, parent);
 
-	__ptreefs_remove(child, parent);
-
-	goto loop;
+		goto loop;
 	}
 	spin_unlock(&parent->d_lock);
 
@@ -79,32 +78,32 @@ loop:
 	mutex_unlock(&d_inode(parent)->i_mutex);
 }
 
-static void repslash(char* oristr)
+static void repslash(char *oristr)
 {
-        char *p = oristr;
-        while(*p != '\0') {
-                if (*p == '/') {
-                        *p = '-';
-                }
-                p++;
-        }
+	char *p = oristr;
+	while (*p != '\0') {
+		if (*p == '/') {
+			*p = '-';
+		}
+		p++;
+	}
 }
 
 static ssize_t ptreefs_read_file(struct file *file, char __user *buf,
-size_t count, loff_t *ppos)
+	size_t count, loff_t *ppos)
 {
 	return 0;
 };
 
-int ptreefs_root_dir_open(struct inode *inode, struct file *file)
-{
+int ptreefs_root_dir_open(struct inode *inode, struct file *file) {
 	struct super_block *sb = inode->i_sb;
 	struct dentry *dentry, *child;
 
 	dentry = file_dentry(file);
 
 	if (!list_empty(&dentry->d_subdirs)) {
-		child = list_first_entry(&dentry->d_subdirs, struct dentry, d_child);
+		child = list_first_entry(&dentry->d_subdirs,
+		struct dentry, d_child);
 		ptreefs_remove_recursive(child);
 	}
 
@@ -114,29 +113,28 @@ int ptreefs_root_dir_open(struct inode *inode, struct file *file)
 }
 
 static ssize_t ptreefs_write_file(struct file *file, const char __user *buf,
-size_t count, loff_t *ppos)
+	size_t count, loff_t *ppos)
 {
 	return count;
 };
 
 const struct file_operations ptreefs_file_operations = {
-	.open		= simple_open,
-	.read		= ptreefs_read_file,
-	.write		= ptreefs_write_file,
+	.open                = simple_open,
+	.read                = ptreefs_read_file,
+	.write                = ptreefs_write_file,
 };
 
 const struct file_operations ptreefs_root_dir_operations = {
-	.open		= ptreefs_root_dir_open,
-	.release	= dcache_dir_close,
-	.llseek		= dcache_dir_lseek,
-	.read		= generic_read_dir,
-	.iterate	= dcache_readdir,
-	.fsync		= noop_fsync,
+	.open                = ptreefs_root_dir_open,
+	.release        = dcache_dir_close,
+	.llseek                = dcache_dir_lseek,
+	.read                = generic_read_dir,
+	.iterate        = dcache_readdir,
+	.fsync                = noop_fsync,
 };
 
 struct inode *ptree_make_inode(struct super_block *sb,
-			       int mode)
-{
+			       int mode) {
 	struct inode *inode;
 	inode = new_inode(sb);
 
@@ -153,29 +151,27 @@ struct inode *ptree_make_inode(struct super_block *sb,
 };
 
 static struct dentry *ptree_mount(struct file_system_type *fs_type,
-                int flags, const char *dev_name,
-                void *data)
-{
-        return mount_single(fs_type, flags, data, ptree_fill_super);
+				  int flags, const char *dev_name,
+				  void *data) {
+	return mount_single(fs_type, flags, data, ptree_fill_super);
 }
 
 static struct file_system_type ptree_fs_type = {
-        .owner          = THIS_MODULE,
-        .name		= "ptreefs",
-        .mount		= ptree_mount,
-        .kill_sb	= kill_litter_super
+	.owner          = THIS_MODULE,
+	.name                = "ptreefs",
+	.mount                = ptree_mount,
+	.kill_sb        = kill_litter_super
 };
 
 struct dentry *ptree_create_dir(struct super_block *sb,
-				 struct dentry *parent, const char *name)
-{
+				struct dentry *parent, const char *name) {
 	struct dentry *dentry;
 	struct inode *inode;
 	struct qstr qname;
 
-	qname.name	= name;
-	qname.len	= strlen (name);
-	qname.hash	= full_name_hash(name, qname.len);
+	qname.name = name;
+	qname.len = strlen(name);
+	qname.hash = full_name_hash(name, qname.len);
 
 	dentry = d_alloc(parent, &qname);
 	/* if (! dentry) */
@@ -198,31 +194,24 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 };
 
 struct dentry *ptree_create_file(struct super_block *sb,
-		struct dentry *dir, const char *name)
-{
+				 struct dentry *dir, const char *name) {
 	struct inode *inode;
 	struct dentry *dentry;
 	struct qstr qname;
 
-	qname.name	= name;
-	qname.len	= strlen(name);
-	qname.hash	= full_name_hash(name, qname.len);
+	qname.name = name;
+	qname.len = strlen(name);
+	qname.hash = full_name_hash(name, qname.len);
 
 	inode = ptree_make_inode(sb, S_IFREG | 0777);
-	/* if (!inode) */
-	/* 	return -ENOMEM; */
 	inode->i_fop = &ptreefs_file_operations;
-
 	dentry = d_alloc(dir, &qname);
-	/* if (!dentry) */
-	/* 	return -ENOMEM; */
-
 	d_add(dentry, inode);
 	return dentry;
 };
 
 static void ptree_create_files(struct super_block *sb,
-		struct dentry *root)
+			       struct dentry *root)
 {
 	char *name = kmalloc(TASK_COMM_LEN + 5, GFP_KERNEL);
 	struct dentry *subdir = root;
@@ -236,25 +225,25 @@ static void ptree_create_files(struct super_block *sb,
 	read_lock(&tasklist_lock);
 	while (!going_up || likely(p != init)) {
 		if (!going_up) {
-			/* Get PID for task */
-			pid = (long)task_pid_nr(p);
+			pid = (long) task_pid_nr(p);
 			sprintf(s_pid, "%ld", pid);
 
-			/* Create a directory for task */
 			subdir = ptree_create_dir(sb, subdir, s_pid);
 
 			get_task_comm(name, p);
-                        repslash(name);
+			repslash(name);
 			strcat(name, ".name");
 			ptree_create_file(sb, subdir, name);
 
 		}
 		if (!going_up && !list_empty(&p->children)) {
-			p = list_last_entry(&p->children, struct task_struct,
-					sibling);
+			p = list_last_entry(&p->children,
+			struct task_struct,
+			sibling);
 		} else if (p->sibling.prev != &p->real_parent->children) {
-			p = list_last_entry(&p->sibling, struct task_struct,
-					sibling);
+			p = list_last_entry(&p->sibling,
+			struct task_struct,
+			sibling);
 			subdir = subdir->d_parent;
 			going_up = false;
 		} else {
@@ -268,43 +257,44 @@ static void ptree_create_files(struct super_block *sb,
 };
 
 static const struct super_operations ptreefs_s_ops = {
-        .statfs         = simple_statfs,
-        .drop_inode     = generic_delete_inode,
+	.statfs         = simple_statfs,
+	.drop_inode     = generic_delete_inode,
 };
 
 static int ptree_fill_super(struct super_block *sb, void *data, int silent)
 {
-        int err;
-        static struct tree_descr ptree_files[] = {{""}};
-        struct inode *inode;
+	int err;
+	static struct tree_descr ptree_files[] = {{""} };
+	struct inode *inode;
 
-        err  =  simple_fill_super(sb, PTREEFS_MAGIC, ptree_files);
-        if (err)
-                goto fail;
-        sb->s_op = &ptreefs_s_ops;
+	err = simple_fill_super(sb, PTREEFS_MAGIC, ptree_files);
+	if (err)
+		goto fail;
+	sb->s_op = &ptreefs_s_ops;
 
-        inode = new_inode(sb);
-        if (!inode)
-                goto fail;
+	inode = new_inode(sb);
+	if (!inode)
+		goto fail;
 
-        inode->i_ino = 1;
-        inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-        inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
-        inode->i_op = &simple_dir_inode_operations;
+	inode->i_ino = 1;
+	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_mode = 0755;
+	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &ptreefs_root_dir_operations;
 
-        sb->s_root = d_make_root(inode);
-        if (!sb->s_root)
-                goto fail;
+	sb->s_root = d_make_root(inode);
+	if (!sb->s_root)
+		goto fail;
 
 	return 0;
 
 fail:
-        return -ENOMEM;
+	return -ENOMEM;
 }
 
 static int __init ptreefs_init(void)
 {
-        return register_filesystem(&ptree_fs_type);
+	return register_filesystem(&ptree_fs_type);
 }
+
 module_init(ptreefs_init);
