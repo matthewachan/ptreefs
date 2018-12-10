@@ -14,12 +14,13 @@ static const int WAIT_TIME = 5;
 
 int main(int argc, char **argv)
 {
-	static char arg1[] = "/bin/ls";
-	static char arg2[] = "-R";
-	static char * const argls[] = {arg1, arg2};
+	char arg1[] = "/bin/ls";
+	char arg2[] = "-R";
+	char * const argls[] = {arg1, arg2};
+	pid_t pid;
 
 	chdir("/ptreefs");
-	pid_t pid = fork();
+	pid = fork();
 	if (pid < 0) {
 		fprintf(stderr, "error: %s\n", strerror(errno));
 		return EXIT_FAILURE;
@@ -56,7 +57,7 @@ int main(int argc, char **argv)
 	}
 	if (pid == 0) {
 		printf("======================================\n");
-		printf("After creating processes, name: test\n");
+		printf("After creating processes, name: ptreeps.name\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
 		exit(0);
