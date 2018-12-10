@@ -17,23 +17,26 @@
 static void ptree_create_files(struct super_block *sb,
 			       struct dentry *root);
 
+static int ptree_fill_super(struct super_block *sb, void *data, int silent);
+
 static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
 {
 	int ret = 0;
 
 	if (simple_positive(dentry)) {
 		dget(dentry);
-		if (d_is_dir(dentry))
+		if (d_is_dir(dentry)) {
+			printk("nlink: %ud\n", d_inode(dentry)->i_nlink);
 			ret = simple_rmdir(d_inode(parent), dentry);
+		}
 		else
 			simple_unlink(d_inode(parent), dentry);
 
 		/* although it is not an empty folder, delete anyway.*/
-
-//		if (!ret) {
-		printk("deleting\n");
-		d_delete(dentry);
-//		}
+		if (!ret) {
+			d_invalidate(dentry);
+			d_delete(dentry);
+		}
 		dput(dentry);
 	}
 	return ret;
@@ -61,6 +64,75 @@ void ptreefs_remove(struct dentry *dentry)
 	mutex_unlock(&d_inode(parent)->i_mutex);
 }
 
+static void ptreefs_remove_recursive(struct dentry *dentry)
+{
+	struct dentry *child, *parent;
+
+	if (IS_ERR_OR_NULL(dentry))
+		return;
+
+	parent = dentry->d_parent;
+	if (!parent || d_really_is_negative(parent))
+		return;
+
+	parent = dentry;
+down:
+	mutex_lock(&d_inode(parent)->i_mutex);
+loop:
+	spin_lock(&parent->d_lock);
+	list_for_each_entry(child, &parent->d_subdirs, d_child) {
+		printk("[%s] ", child->d_name.name);
+	}
+	printk("\n");
+	list_for_each_entry(child, &parent->d_subdirs, d_child) {
+	if (!simple_positive(child)) {
+		printk("[%s] deleted succ\n", child->d_name.name);
+		continue;
+	}
+	else
+		printk("[%s] not deleted\n", child->d_name.name);
+
+	/* perhaps simple_empty(child) makes more sense */
+	if (!list_empty(&child->d_subdirs)) {
+		spin_unlock(&parent->d_lock);
+		mutex_unlock(&d_inode(parent)->i_mutex);
+		parent = child;
+		goto down;
+	}
+
+	spin_unlock(&parent->d_lock);
+
+	if (!__ptreefs_remove(child, parent)) {
+		printk("[%s] deleted\n", child->d_name.name);
+	}
+
+	/*
+	 * The parent->d_lock protects agaist child from unlinking
+	 * from d_subdirs. When releasing the parent->d_lock we can
+	 * no longer trust that the next pointer is valid.
+	 * Restart the loop. We'll skip this one with the
+	 * simple_positive() check.
+	 */
+	goto loop;
+	}
+	spin_unlock(&parent->d_lock);
+
+	mutex_unlock(&d_inode(parent)->i_mutex);
+	child = parent;
+	parent = parent->d_parent;
+	mutex_lock(&d_inode(parent)->i_mutex);
+
+	if (child != dentry)
+		/* go up */
+		goto loop;
+
+	printk("Root [%s] visited\n", child->d_name.name);
+	if (!__ptreefs_remove(child, parent)) {
+		printk("[%s] deleted\n", child->d_name.name);
+	}
+	mutex_unlock(&d_inode(parent)->i_mutex);
+}
+
 static void repslash(char* oristr)
 {
         char *p = oristr;
@@ -80,19 +152,17 @@ size_t count, loff_t *ppos)
 
 int ptreefs_root_dir_open(struct inode *inode, struct file *file)
 {
-	struct super_block *sb;
+	struct super_block *sb = inode->i_sb;
 	struct dentry *dentry, *child;
 
 	dentry = file_dentry(file);
 
 	if (!list_empty(&dentry->d_subdirs)) {
 		child = list_first_entry(&dentry->d_subdirs, struct dentry, d_child);
-		ptreefs_remove(child);
+		ptreefs_remove_recursive(child);
 	}
 
-	sb = inode->i_sb;
 	ptree_create_files(sb, sb->s_root);
-
 
 	return dcache_dir_open(inode, file);
 }
@@ -134,6 +204,20 @@ struct inode *ptree_make_inode(struct super_block *sb,
 	inode->i_blocks = 0;
 
 	return inode;
+};
+
+static struct dentry *ptree_mount(struct file_system_type *fs_type,
+                int flags, const char *dev_name,
+                void *data)
+{
+        return mount_single(fs_type, flags, data, ptree_fill_super);
+}
+
+static struct file_system_type ptree_fs_type = {
+        .owner          = THIS_MODULE,
+        .name		= "ptreefs",
+        .mount		= ptree_mount,
+        .kill_sb	= kill_litter_super
 };
 
 struct dentry *ptree_create_dir(struct super_block *sb,
@@ -267,6 +351,7 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         sb->s_root = d_make_root(inode);
         if (!sb->s_root)
                 goto fail;
+	ptree_create_files(sb, sb->s_root);
 
 	return 0;
 
@@ -274,20 +359,6 @@ fail:
 	pr_err("get root dentry failed\n");
         return -ENOMEM;
 }
-
-static struct dentry *ptree_mount(struct file_system_type *fs_type,
-                int flags, const char *dev_name,
-                void *data)
-{
-        return mount_single(fs_type, flags, data, ptree_fill_super);
-}
-
-static struct file_system_type ptree_fs_type = {
-        .owner          = THIS_MODULE,
-        .name		= "ptreefs",
-        .mount		= ptree_mount,
-        .kill_sb	= kill_litter_super
-};
 
 static int __init ptreefs_init(void)
 {
