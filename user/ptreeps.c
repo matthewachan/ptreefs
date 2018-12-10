@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define CHILD_COUNT 20
@@ -13,12 +14,12 @@ static const int WAIT_TIME = 5;
 
 int main(int argc, char **argv)
 {
-	static const char arg1[] = "/bin/ls";
-	static const char arg2[] = "-R";
-	static const char * const argls[] = {arg1, arg2};
+	static char arg1[] = "/bin/ls";
+	static char arg2[] = "-R";
+	static char * const argls[] = {arg1, arg2};
 
 	chdir("/ptreefs");
-	pid = fork();
+	pid_t pid = fork();
 	if (pid < 0) {
 		fprintf(stderr, "error: %s\n", strerror(errno));
 		return EXIT_FAILURE;
