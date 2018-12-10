@@ -14,6 +14,53 @@
 #include <linux/seq_file.h>
 #include <linux/pagemap.h>
 
+static void ptree_create_files(struct super_block *sb,
+			       struct dentry *root);
+
+static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
+{
+	int ret = 0;
+
+	if (simple_positive(dentry)) {
+		dget(dentry);
+		if (d_is_dir(dentry))
+			ret = simple_rmdir(d_inode(parent), dentry);
+		else
+			simple_unlink(d_inode(parent), dentry);
+
+		/* although it is not an empty folder, delete anyway.*/
+
+//		if (!ret) {
+		printk("deleting\n");
+		d_delete(dentry);
+//		}
+		dput(dentry);
+	}
+	return ret;
+}
+
+void ptreefs_remove(struct dentry *dentry)
+{
+	struct dentry *parent;
+	int ret;
+
+	if (IS_ERR_OR_NULL(dentry)){
+		printk("dentry is err or null\n");
+		return;
+	}
+
+	parent = dentry->d_parent;
+	if (!parent || d_really_is_negative(parent)){
+		printk("dentry's parent is wrong\n");
+		return;
+	}
+
+
+	mutex_lock(&d_inode(parent)->i_mutex);
+	ret = __ptreefs_remove(dentry, parent);
+	mutex_unlock(&d_inode(parent)->i_mutex);
+}
+
 static void repslash(char* oristr)
 {
         char *p = oristr;
@@ -25,67 +72,48 @@ static void repslash(char* oristr)
         }
 }
 
-static int ptreefs_open_file(struct inode *inode, struct file *file)
-{
-	printk("I am open\n");
-	return simple_open(inode, file);
-};
-
 static ssize_t ptreefs_read_file(struct file *file, char __user *buf,
 size_t count, loff_t *ppos)
 {
-	printk("I am read\n");
 	return 0;
 };
 
-static int ptreefs_update(struct inode *inode, struct file *file)
+int ptreefs_root_dir_open(struct inode *inode, struct file *file)
 {
-	const char *name = file->f_path.dentry->d_name.name;
-	struct task_struct *p;
-	long pid;
+	struct super_block *sb;
+	struct dentry *dentry, *child;
 
-	/*Find task by name (alternative for generality)*/
-	pid = strtol(name, NULL, 10);
-	p = find_task_by_vpid(pid);
-	if (!p)
-	/*Process updated handler*/
-		return -EFAULT;
+	dentry = file_dentry(file);
 
-}
+	if (!list_empty(&dentry->d_subdirs)) {
+		child = list_first_entry(&dentry->d_subdirs, struct dentry, d_child);
+		ptreefs_remove(child);
+	}
 
-int ptreefs_dir_open(struct inode *inode, struct file *file)
-{
-	static struct qstr cursor_name = QSTR_INIT(".", 1);
-	const char *name = file->f_path.dentry->d_name.name;
+	sb = inode->i_sb;
+	ptree_create_files(sb, sb->s_root);
 
-	// if (inode->i_sb->s_root ==
-	// 	file->f_path.dentry->d_parent) {
-	printk("Dir[%s] open\n", name);
-	ptreefs_update(inode, file);
-	// }
-	file->private_data = d_alloc(file->f_path.dentry, &cursor_name);
 
-	return file->private_data ? 0 : -ENOMEM;
+	return dcache_dir_open(inode, file);
 }
 
 static ssize_t ptreefs_write_file(struct file *file, const char __user *buf,
 size_t count, loff_t *ppos)
 {
-	printk("I am write\n");
 	return count;
 };
 
 const struct file_operations ptreefs_file_operations = {
-	.open		= ptreefs_open_file,
+	.open		= simple_open,
 	.read		= ptreefs_read_file,
 	.write		= ptreefs_write_file,
 };
 
-const struct file_operations ptreefs_dir_operations = {
-	.open		= ptreefs_dir_open,
+const struct file_operations ptreefs_root_dir_operations = {
+	.open		= ptreefs_root_dir_open,
 	.release	= dcache_dir_close,
 	.llseek		= dcache_dir_lseek,
-	.read		= ptreefs_read_file,
+	.read		= generic_read_dir,
 	.iterate	= dcache_readdir,
 	.fsync		= noop_fsync,
 };
@@ -104,7 +132,6 @@ struct inode *ptree_make_inode(struct super_block *sb,
 	inode->i_mode = mode;
 	inode->i_blkbits = PAGE_CACHE_SIZE;
 	inode->i_blocks = 0;
-	/* inode->i_uid = inode->i_gid = 0; */
 
 	return inode;
 };
@@ -129,7 +156,7 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 	/* 	goto out_dput; */
 
 	inode->i_op = &simple_dir_inode_operations;
-	inode->i_fop = &ptreefs_dir_operations;
+	inode->i_fop = &simple_dir_operations;
 
 	d_add(dentry, inode);
 	return dentry;
@@ -235,12 +262,12 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
         inode->i_op = &simple_dir_inode_operations;
         //inode->i_fop = &ptreefs_file_ops;
-	inode->i_fop = &simple_dir_operations;
+	inode->i_fop = &ptreefs_root_dir_operations;
 
         sb->s_root = d_make_root(inode);
         if (!sb->s_root)
                 goto fail;
-	ptree_create_files(sb, sb->s_root);
+
 	return 0;
 
 fail:
