@@ -14,9 +14,9 @@ static const int WAIT_TIME = 5;
 
 int main(int argc, char **argv)
 {
-	static char arg1[] = "/bin/ls";
-	static char arg2[] = "-R";
-	static char * const argls[] = {arg1, arg2};
+	char *arg1 = "/bin/ls";
+	char *arg2 = "-R";
+	char *const argls[] = {arg1, arg2};
 
 	chdir("/ptreefs");
 	pid_t pid = fork();
@@ -29,7 +29,10 @@ int main(int argc, char **argv)
 		printf("initial process tree\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 	while (wait(NULL) > 0)
@@ -45,7 +48,8 @@ int main(int argc, char **argv)
 		}
 		if (pid == 0) {
 			sleep(WAIT_TIME);
-			return 0;
+			exit(0);
+			/* return 0; */
 		}
 	}
 
@@ -59,7 +63,10 @@ int main(int argc, char **argv)
 		printf("After creating processes, name: test\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 
@@ -75,7 +82,10 @@ int main(int argc, char **argv)
 		printf("After processes terminated\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 	while (wait(NULL) > 0)
