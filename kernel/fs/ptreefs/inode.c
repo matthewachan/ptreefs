@@ -21,47 +21,14 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent);
 
 static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
 {
-	int ret = 0;
-
 	if (simple_positive(dentry)) {
 		dget(dentry);
-		if (d_is_dir(dentry)) {
-			printk("nlink: %ud\n", d_inode(dentry)->i_nlink);
-			ret = simple_rmdir(d_inode(parent), dentry);
-		}
-		else
-			simple_unlink(d_inode(parent), dentry);
-
-		/* although it is not an empty folder, delete anyway.*/
-		if (!ret) {
-			d_invalidate(dentry);
-			d_delete(dentry);
-		}
+		simple_unlink(d_inode(parent), dentry);
+		d_invalidate(dentry);
+		d_delete(dentry);
 		dput(dentry);
 	}
-	return ret;
-}
-
-void ptreefs_remove(struct dentry *dentry)
-{
-	struct dentry *parent;
-	int ret;
-
-	if (IS_ERR_OR_NULL(dentry)){
-		printk("dentry is err or null\n");
-		return;
-	}
-
-	parent = dentry->d_parent;
-	if (!parent || d_really_is_negative(parent)){
-		printk("dentry's parent is wrong\n");
-		return;
-	}
-
-
-	mutex_lock(&d_inode(parent)->i_mutex);
-	ret = __ptreefs_remove(dentry, parent);
-	mutex_unlock(&d_inode(parent)->i_mutex);
+	return 0;
 }
 
 static void ptreefs_remove_recursive(struct dentry *dentry)
@@ -81,16 +48,8 @@ down:
 loop:
 	spin_lock(&parent->d_lock);
 	list_for_each_entry(child, &parent->d_subdirs, d_child) {
-		printk("[%s] ", child->d_name.name);
-	}
-	printk("\n");
-	list_for_each_entry(child, &parent->d_subdirs, d_child) {
-	if (!simple_positive(child)) {
-		printk("[%s] deleted succ\n", child->d_name.name);
+	if (!simple_positive(child))
 		continue;
-	}
-	else
-		printk("[%s] not deleted\n", child->d_name.name);
 
 	/* perhaps simple_empty(child) makes more sense */
 	if (!list_empty(&child->d_subdirs)) {
@@ -102,17 +61,8 @@ loop:
 
 	spin_unlock(&parent->d_lock);
 
-	if (!__ptreefs_remove(child, parent)) {
-		printk("[%s] deleted\n", child->d_name.name);
-	}
+	__ptreefs_remove(child, parent);
 
-	/*
-	 * The parent->d_lock protects agaist child from unlinking
-	 * from d_subdirs. When releasing the parent->d_lock we can
-	 * no longer trust that the next pointer is valid.
-	 * Restart the loop. We'll skip this one with the
-	 * simple_positive() check.
-	 */
 	goto loop;
 	}
 	spin_unlock(&parent->d_lock);
@@ -123,13 +73,9 @@ loop:
 	mutex_lock(&d_inode(parent)->i_mutex);
 
 	if (child != dentry)
-		/* go up */
 		goto loop;
 
-	printk("Root [%s] visited\n", child->d_name.name);
-	if (!__ptreefs_remove(child, parent)) {
-		printk("[%s] deleted\n", child->d_name.name);
-	}
+	__ptreefs_remove(child, parent);
 	mutex_unlock(&d_inode(parent)->i_mutex);
 }
 
@@ -345,18 +291,15 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
         inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
         inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
         inode->i_op = &simple_dir_inode_operations;
-        //inode->i_fop = &ptreefs_file_ops;
 	inode->i_fop = &ptreefs_root_dir_operations;
 
         sb->s_root = d_make_root(inode);
         if (!sb->s_root)
                 goto fail;
-	ptree_create_files(sb, sb->s_root);
 
 	return 0;
 
 fail:
-	pr_err("get root dentry failed\n");
         return -ENOMEM;
 }
 
