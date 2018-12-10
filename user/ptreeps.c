@@ -30,7 +30,10 @@ int main(int argc, char **argv)
 		printf("initial process tree\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 	while (wait(NULL) > 0)
@@ -46,7 +49,8 @@ int main(int argc, char **argv)
 		}
 		if (pid == 0) {
 			sleep(WAIT_TIME);
-			return 0;
+			exit(0);
+			/* return 0; */
 		}
 	}
 
@@ -60,7 +64,10 @@ int main(int argc, char **argv)
 		printf("After creating processes, name: ptreeps.name\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 
@@ -76,7 +83,10 @@ int main(int argc, char **argv)
 		printf("After processes terminated\n");
 		printf("======================================\n");
 		execv(argls[0], argls);
-		exit(0);
+
+		/* Should not reach here */
+		fprintf(stderr, "error: %s\n", strerror(errno));
+		exit(1);
 	}
 
 	while (wait(NULL) > 0)
