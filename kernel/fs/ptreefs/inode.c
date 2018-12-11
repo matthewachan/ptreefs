@@ -14,7 +14,7 @@
 #include <linux/seq_file.h>
 #include <linux/pagemap.h>
 
-static void ptree_create_files(struct super_block *sb,
+static int ptree_create_files(struct super_block *sb,
 			       struct dentry *root);
 
 static int ptree_fill_super(struct super_block *sb, void *data, int silent);
@@ -110,7 +110,8 @@ int ptreefs_root_dir_open(struct inode *inode, struct file *file)
 		ptreefs_remove_recursive(child);
 	}
 
-	ptree_create_files(sb, sb->s_root);
+	if (ptree_create_files(sb, sb->s_root) < 0)
+		return -ENOMEM;
 
 	return dcache_dir_open(inode, file);
 }
@@ -142,8 +143,8 @@ struct inode *ptree_make_inode(struct super_block *sb,
 
 	inode = new_inode(sb);
 
-	/*if (!inode) */
-	/*	return -ENOMEM; */
+	if (!inode)
+		return 0;
 
 	inode->i_ino = get_next_ino();
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -178,12 +179,14 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 	qname.hash = full_name_hash(name, qname.len);
 
 	dentry = d_alloc(parent, &qname);
-	/*if (! dentry) */
-	/*	goto out; */
+	if (!dentry)
+		return 0;
 
-	inode = ptree_make_inode(sb, S_IFDIR | 0777);
-	/*if (! inode) */
-	/*	goto out_dput; */
+	inode = ptree_make_inode(sb, S_IFDIR | 0555);
+	if (!inode) {
+		dput(dentry);
+		return 0;
+	}
 
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &simple_dir_operations;
@@ -191,10 +194,6 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 	d_add(dentry, inode);
 	return dentry;
 
-	/*out_dput: */
-	/*	dput(dentry); */
-	/*out: */
-	/*	return 0; */
 };
 
 struct dentry *ptree_create_file(struct super_block *sb,
@@ -207,14 +206,14 @@ struct dentry *ptree_create_file(struct super_block *sb,
 	qname.len = strlen(name);
 	qname.hash = full_name_hash(name, qname.len);
 
-	inode = ptree_make_inode(sb, S_IFREG | 0777);
+	inode = ptree_make_inode(sb, S_IFREG | 0555);
 	inode->i_fop = &ptreefs_file_operations;
 	dentry = d_alloc(dir, &qname);
 	d_add(dentry, inode);
 	return dentry;
 };
 
-static void ptree_create_files(struct super_block *sb,
+static int ptree_create_files(struct super_block *sb,
 			       struct dentry *root)
 {
 	char *name = kmalloc(TASK_COMM_LEN + 5, GFP_KERNEL);
@@ -233,6 +232,8 @@ static void ptree_create_files(struct super_block *sb,
 			sprintf(s_pid, "%ld", pid);
 
 			subdir = ptree_create_dir(sb, subdir, s_pid);
+			if (!subdir)
+				return -ENOMEM;
 
 			get_task_comm(name, p);
 			repslash(name);
@@ -258,6 +259,8 @@ static void ptree_create_files(struct super_block *sb,
 	}
 	read_unlock(&tasklist_lock);
 	kfree(name);
+
+	return 0;
 };
 
 static const struct super_operations ptreefs_s_ops = {
