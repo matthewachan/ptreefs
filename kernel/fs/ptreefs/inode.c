@@ -19,7 +19,8 @@ static void ptree_create_files(struct super_block *sb,
 
 static int ptree_fill_super(struct super_block *sb, void *data, int silent);
 
-static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent) {
+static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent)
+{
 	if (simple_positive(dentry)) {
 		dget(dentry);
 		simple_unlink(d_inode(parent), dentry);
@@ -30,7 +31,8 @@ static int __ptreefs_remove(struct dentry *dentry, struct dentry *parent) {
 	return 0;
 }
 
-static void ptreefs_remove_recursive(struct dentry *dentry) {
+static void ptreefs_remove_recursive(struct dentry *dentry)
+{
 	struct dentry *child, *parent;
 
 	if (IS_ERR_OR_NULL(dentry))
@@ -41,12 +43,11 @@ static void ptreefs_remove_recursive(struct dentry *dentry) {
 		return;
 
 	parent = dentry;
-	down:
+down:
 	mutex_lock(&d_inode(parent)->i_mutex);
-	loop:
+loop:
 	spin_lock(&parent->d_lock);
-	list_for_each_entry(child, &parent->d_subdirs, d_child)
-	{
+	list_for_each_entry(child, &parent->d_subdirs, d_child) {
 		if (!simple_positive(child))
 			continue;
 
@@ -81,10 +82,10 @@ static void ptreefs_remove_recursive(struct dentry *dentry) {
 static void repslash(char *oristr)
 {
 	char *p = oristr;
+
 	while (*p != '\0') {
-		if (*p == '/') {
+		if (*p == '/')
 			*p = '-';
-		}
 		p++;
 	}
 }
@@ -95,7 +96,8 @@ static ssize_t ptreefs_read_file(struct file *file, char __user *buf,
 	return 0;
 };
 
-int ptreefs_root_dir_open(struct inode *inode, struct file *file) {
+int ptreefs_root_dir_open(struct inode *inode, struct file *file)
+{
 	struct super_block *sb = inode->i_sb;
 	struct dentry *dentry, *child;
 
@@ -104,6 +106,7 @@ int ptreefs_root_dir_open(struct inode *inode, struct file *file) {
 	if (!list_empty(&dentry->d_subdirs)) {
 		child = list_first_entry(&dentry->d_subdirs,
 		struct dentry, d_child);
+
 		ptreefs_remove_recursive(child);
 	}
 
@@ -136,10 +139,11 @@ const struct file_operations ptreefs_root_dir_operations = {
 struct inode *ptree_make_inode(struct super_block *sb,
 			       int mode) {
 	struct inode *inode;
+
 	inode = new_inode(sb);
 
-	/* if (!inode) */
-	/* 	return -ENOMEM; */
+	/*if (!inode) */
+	/*	return -ENOMEM; */
 
 	inode->i_ino = get_next_ino();
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
@@ -174,12 +178,12 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 	qname.hash = full_name_hash(name, qname.len);
 
 	dentry = d_alloc(parent, &qname);
-	/* if (! dentry) */
-	/* 	goto out; */
+	/*if (! dentry) */
+	/*	goto out; */
 
 	inode = ptree_make_inode(sb, S_IFDIR | 0777);
-	/* if (! inode) */
-	/* 	goto out_dput; */
+	/*if (! inode) */
+	/*	goto out_dput; */
 
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &simple_dir_operations;
@@ -187,10 +191,10 @@ struct dentry *ptree_create_dir(struct super_block *sb,
 	d_add(dentry, inode);
 	return dentry;
 
-	/* out_dput: */
-	/* 	dput(dentry); */
-	/* out: */
-	/* 	return 0; */
+	/*out_dput: */
+	/*	dput(dentry); */
+	/*out: */
+	/*	return 0; */
 };
 
 struct dentry *ptree_create_file(struct super_block *sb,
