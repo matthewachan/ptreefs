@@ -282,7 +282,7 @@ static int ptree_fill_super(struct super_block *sb, void *data, int silent)
 
 	inode->i_ino = 1;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
-	inode->i_mode = 0755;
+	inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR;
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &ptreefs_root_dir_operations;
 
