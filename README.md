@@ -12,6 +12,8 @@ Features:
 - ptreefs is updated accordingly when processes are created/terminated
 - This filesystem is in-memory (much like [ramfs](https://wiki.debian.org/ramfs) or [procfs](https://en.wikipedia.org/wiki/Procfs)), so data is not placed in persistent storage
 
+![](etc/screencap.gif)
+
 ## Installation
 
 This version of the Linux kernel can be compiled using the following commands.
